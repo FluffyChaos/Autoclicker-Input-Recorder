@@ -21,7 +21,7 @@ ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) return true;
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) { return true; }
     if (msg == WM_DESTROY) { PostQuitMessage(0); return 0; }
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
@@ -31,6 +31,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // ───── Klick-Thread starten ─────
     std::thread clickThread(ClickerThread);
     std::thread inputThread(RawInputThread);
+	std::thread replayThread(ReplayThread);
     // ────────────────────────────────
     OutputDebugStringA("Hallo Output!\n");
 
@@ -108,9 +109,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         int  cps = clicksPerSecond.load();
         int  btn = mouseButton.load();
 
-        if (f6pressed()) {
+        if (FKeypressed(6)) {
             autoClickEnabled = !autoClickEnabled.load();
         }
+        if (FKeypressed(9)) {
+			NewRecording();
+            recording = !recording.load();
+        }
+        if (FKeypressed(10)) {
+            playing = !playing.load();
+        }//more ugly code yay
 
         if (ImGui::InputInt("Klicks / Sekunde", &cps)) {
             clicksPerSecond = cps;
@@ -124,15 +132,35 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         ImGui::Spacing();
 
         // Status anzeigen
-        if (autoClickEnabled)
-            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "● Aktiv");
-        else
-            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "■ Inaktiv");
+        
 
         ImGui::Spacing();
-        if (ImGui::Button("Start (F6)", ImVec2(120, 35))) autoClickEnabled = true;
+        if (ImGui::Button("Start (F6)", ImVec2(150, 35))) { autoClickEnabled = true; }
         ImGui::SameLine();
-        if (ImGui::Button("Stop (F6)", ImVec2(120, 35))) autoClickEnabled = false;
+        if (ImGui::Button("Stop (F6)", ImVec2(150, 35))) { autoClickEnabled = false; }
+
+        if (autoClickEnabled.load()) {
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "● Klickt"); }
+        else {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "■ Inaktiv"); }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Start Recording (F9)", ImVec2(150, 35))) { recording = true; NewRecording();}
+        ImGui::SameLine();
+        if (ImGui::Button("Stop Recording (F9)", ImVec2(150, 35))) { recording = false; }
+        if (recording.load()) {
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "● Nimmt auf"); }
+        else {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "■ Inaktiv"); }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Start Replay (F10)", ImVec2(150, 35))) { playing = true; }
+        ImGui::SameLine();
+        if (ImGui::Button("Stop Replay (F10)", ImVec2(150, 35))) { playing = false; }
+        if (playing.load()) {
+            ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "● Spielt ab"); }
+        else {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "■ Inaktiv"); }
 
         ImGui::End();
         ImGui::PopStyleVar();
@@ -147,6 +175,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // ───── Sauber beenden ─────
     appRunning = false;
+    recording = false;
+	playing = false;
+	replayThread.join();
     clickThread.join();
     inputThread.join();
     // ──────────────────────────
